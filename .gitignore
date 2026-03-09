@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Build output
+opskit
+*.exe
+
+# Claude Code local settings (developer-specific)
+.claude/
+
+# Go
+*.test
+*.out
+
+# Local config (contains API keys)
+*.env
