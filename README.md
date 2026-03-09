@@ -69,7 +69,7 @@ go build -o opskit .
 |------|------|
 | `doubao-seed-2.0-code` | 默认，代码能力强 |
 | `doubao-seed-2.0-pro` | 综合能力强 |
-| `ark-code-latest` | 最新代码模型 |
+| `ark-code-latest` | 自动选择模型 |
 | `kimi-k2.5` | Kimi 系列 |
 | `deepseek-v3.2` | DeepSeek 系列 |
 
