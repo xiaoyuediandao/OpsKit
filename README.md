@@ -51,7 +51,7 @@ go build -o opskit .
 
 ## 配置
 
-配置文件存储在 `~/.opckit/config.json`，包含以下字段：
+配置文件存储在 `~/.opskit/config.json`，包含以下字段：
 
 ```json
 {
@@ -91,7 +91,7 @@ OpsKit/
 │   ├── ai/
 │   │   └── client.go        # AI 客户端（流式/工具调用）
 │   ├── config/
-│   │   └── config.go        # 配置读写（~/.opckit/config.json）
+│   │   └── config.go        # 配置读写（~/.opskit/config.json）
 │   ├── exec/
 │   │   ├── runner.go        # Shell 命令执行器
 │   │   └── config.go        # OpenClaw 配置写入
