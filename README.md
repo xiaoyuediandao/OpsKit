@@ -36,7 +36,7 @@ OpsKit 是一个基于终端 UI 的 AI 运维助手，专为 [OpenClaw](https://
 ### 从源码构建
 
 ```bash
-git clone https://github.com/your-username/OpsKit.git
+git clone https://github.com/xiaoyuediandao/opskit.git
 cd OpsKit
 go build -o opskit .
 ```
