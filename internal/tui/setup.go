@@ -50,7 +50,8 @@ func (m Model) updateSetup(msg tea.Msg) (Model, tea.Cmd) {
 			Timestamp: time.Now(),
 		})
 		_ = state.Save(m.lobster.ToState())
-		return m, m.focusInput()
+		m.input.Focus()
+		return m, tea.Batch(textinputBlink(), m.scheduleHealthTick())
 	}
 
 	return m, nil
@@ -127,11 +128,6 @@ func (m Model) saveSetupConfig() tea.Cmd {
 	}
 }
 
-func (m Model) focusInput() tea.Cmd {
-	m.input.Focus()
-	return textinputBlink()
-}
-
 // viewSetup renders the setup wizard.
 func (m Model) viewSetup() string {
 	w := m.width
@@ -189,7 +185,7 @@ func (m Model) viewSetup() string {
 		sb.WriteString(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("  API Key 格式通常为: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx") + "\n\n",
 		)
-		sb.WriteString("  > " + m.setupInput.View() + "\n")
+		sb.WriteString(m.setupInput.View() + "\n")
 		if m.setupErr != "" {
 			sb.WriteString("\n  " + lipgloss.NewStyle().Foreground(colorError).Render("✗ "+m.setupErr) + "\n")
 		}
@@ -201,7 +197,7 @@ func (m Model) viewSetup() string {
 		sb.WriteString(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("  默认使用方舟 Coding Plan 端点，直接回车即可") + "\n\n",
 		)
-		sb.WriteString("  > " + m.setupInput.View() + "\n")
+		sb.WriteString(m.setupInput.View() + "\n")
 
 	case 3:
 		sb.WriteString(
@@ -210,7 +206,7 @@ func (m Model) viewSetup() string {
 		sb.WriteString(
 			lipgloss.NewStyle().Foreground(colorMuted).Render("  可选模型：doubao-seed-2.0-code, doubao-seed-2.0-pro, ark-code-latest") + "\n\n",
 		)
-		sb.WriteString("  > " + m.setupInput.View() + "\n")
+		sb.WriteString(m.setupInput.View() + "\n")
 		if m.setupErr != "" {
 			sb.WriteString("\n  " + lipgloss.NewStyle().Foreground(colorError).Render("✗ "+m.setupErr) + "\n")
 		}
@@ -229,7 +225,15 @@ func (m Model) viewSetup() string {
 		sb.WriteString("\n" + lipgloss.NewStyle().Foreground(colorMuted).Render("  Enter: 确认  Ctrl+C: 退出"))
 	}
 
-	return sb.String()
+	// Pad output to fill terminal height to prevent old content bleeding through
+	result := sb.String()
+	lines := strings.Count(result, "\n")
+	for lines < m.height-1 {
+		result += "\n"
+		lines++
+	}
+
+	return result
 }
 
 // textinputEchoPassword is the password echo mode constant.

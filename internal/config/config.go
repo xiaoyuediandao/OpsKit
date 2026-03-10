@@ -23,7 +23,7 @@ func configPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".opckit", "config.json"), nil
+	return filepath.Join(home, ".opskit", "config.json"), nil
 }
 
 // Load reads the config from disk. Returns nil, nil if not found.
@@ -52,7 +52,7 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")

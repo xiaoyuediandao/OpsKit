@@ -31,34 +31,33 @@ var (
 			Foreground(colorUser).
 			Background(lipgloss.Color("#2D3748")).
 			Padding(0, 1).
-			MarginTop(1)
+			MarginLeft(2)
 
 	styleAssistantMsg = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#E2E8F0")).
-				MarginTop(1)
+				PaddingLeft(2)
 
 	styleSystemMsg = lipgloss.NewStyle().
 			Foreground(colorMuted).
-			Italic(true).
-			MarginTop(1)
+			Italic(true)
 
 	styleToolPreview = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(colorSecondary).
 				Padding(0, 1).
-				MarginTop(1)
+				MarginLeft(2)
 
 	styleToolResult = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), false, false, false, true).
 			BorderForeground(colorSuccess).
 			Padding(0, 1).
-			MarginTop(1)
+			MarginLeft(2)
 
 	styleToolResultErr = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, false, false, true).
 				BorderForeground(colorError).
 				Padding(0, 1).
-				MarginTop(1)
+				MarginLeft(2)
 
 	styleMuted = lipgloss.NewStyle().Foreground(colorMuted)
 
@@ -96,7 +95,7 @@ func (m Model) viewChat() string {
 	if m.showTaskPanel {
 		// Split layout: chat + task panel
 		chatContent := m.viewport.View()
-		taskContent := viewTaskPanel(defaultTasks(), m.lobster, taskPanelWidth)
+		taskContent := viewTaskPanel(m.tasks, m.lobster, m.achievements, taskPanelWidth)
 
 		// Render side by side
 		combined := lipgloss.JoinHorizontal(
@@ -213,50 +212,54 @@ func (m Model) renderMessages() string {
 
 func renderMessage(msg ChatMessage, width int) string {
 	timeStr := msg.Timestamp.Format("15:04")
+	contentWidth := width - 6
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
 
 	switch msg.Role {
 	case "user":
 		label := lipgloss.NewStyle().
 			Foreground(colorSecondary).
 			Bold(true).
-			Render("你") + " " + styleMuted.Render(timeStr)
-		content := styleUserMsg.Width(width - 4).Render(msg.Content)
-		return label + "\n" + content
+			Render("  💬 你") + "  " + styleMuted.Render(timeStr)
+		content := styleUserMsg.Width(contentWidth).Render(msg.Content)
+		return "\n" + label + "\n" + content
 
 	case "assistant", "assistant_streaming":
 		label := lipgloss.NewStyle().
 			Foreground(colorPrimary).
 			Bold(true).
-			Render("🦞 Claw") + " " + styleMuted.Render(timeStr)
+			Render("  🦞 Claw") + "  " + styleMuted.Render(timeStr)
 		rendered := renderMarkdown(msg.Content)
-		// Remove trailing newline added by glamour
 		rendered = strings.TrimRight(rendered, "\n")
-		content := styleAssistantMsg.Width(width - 4).Render(rendered)
-		return label + "\n" + content
+		content := styleAssistantMsg.Width(contentWidth).Render(rendered)
+		return "\n" + label + "\n" + content
 
 	case "system":
-		return styleSystemMsg.Width(width - 4).Render(fmt.Sprintf("⚙ %s", msg.Content))
+		return styleSystemMsg.PaddingLeft(2).Width(contentWidth).Render(fmt.Sprintf("⚙ %s", msg.Content))
 
 	case "tool_preview":
 		label := lipgloss.NewStyle().
 			Foreground(colorSecondary).
 			Bold(true).
+			PaddingLeft(2).
 			Render(fmt.Sprintf("🔧 工具预览 [%s]", msg.ToolName))
 		rendered := renderMarkdown(msg.Content)
 		rendered = strings.TrimRight(rendered, "\n")
-		content := styleToolPreview.Width(width - 6).Render(rendered)
-		return label + "\n" + content
+		content := styleToolPreview.Width(contentWidth).Render(rendered)
+		return "\n" + label + "\n" + content
 
 	case "tool_result":
-		isErr := strings.HasPrefix(msg.Content, "执行出错")
-		label := lipgloss.NewStyle().Bold(true)
+		isErr := msg.IsError
+		label := lipgloss.NewStyle().Bold(true).PaddingLeft(2)
 		if isErr {
 			label = label.Foreground(colorError)
 		} else {
 			label = label.Foreground(colorSuccess)
 		}
 
-		labelStr := label.Render(fmt.Sprintf("📋 执行结果 [%s]", msg.ToolName))
+		labelStr := label.Render(fmt.Sprintf("📋 执行结果 [%s]", msg.ToolName)) + "  " + styleMuted.Render(timeStr)
 
 		content := msg.Content
 		if len(content) > 3000 {
@@ -269,8 +272,8 @@ func renderMessage(msg ChatMessage, width int) string {
 		} else {
 			resultStyle = styleToolResult
 		}
-		rendered := resultStyle.Width(width - 6).Render(content)
-		return labelStr + "\n" + rendered + " " + styleMuted.Render(timeStr)
+		rendered := resultStyle.Width(contentWidth).Render(content)
+		return "\n" + labelStr + "\n" + rendered
 
 	default:
 		return styleMuted.Render(msg.Content)

@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"opskit/internal/achievement"
+	"opskit/internal/quest"
 )
 
 // Task represents a task in the task panel.
@@ -15,19 +18,23 @@ type Task struct {
 	Status      string // "pending", "running", "done", "failed"
 }
 
-// defaultTasks returns a set of standard OpenClaw tasks.
-func defaultTasks() []Task {
-	return []Task{
-		{ID: 1, Title: "安装 OpenClaw", Status: "pending", Description: "curl -fsSL https://openclaw.ai/install.sh | bash"},
-		{ID: 2, Title: "配置 API Key", Status: "pending", Description: "写入 ~/.openclaw/openclaw.json"},
-		{ID: 3, Title: "启动 Gateway", Status: "pending", Description: "openclaw gateway start"},
-		{ID: 4, Title: "接入飞书", Status: "pending", Description: "安装飞书插件并配对"},
-		{ID: 5, Title: "加载行业模板", Status: "pending", Description: "选择适合的行业模板"},
+// questsToTasks converts quest states to Task structs for the task panel.
+func questsToTasks(questStates map[string]string) []Task {
+	displays := quest.QuestsToDisplay(questStates)
+	tasks := make([]Task, len(displays))
+	for i, d := range displays {
+		tasks[i] = Task{
+			ID:          i + 1,
+			Title:       fmt.Sprintf("[%s] %s", d.ID, d.Title),
+			Description: d.Description,
+			Status:      d.Status,
+		}
 	}
+	return tasks
 }
 
 // viewTaskPanel renders the task panel.
-func viewTaskPanel(tasks []Task, lobster Lobster, panelWidth int) string {
+func viewTaskPanel(tasks []Task, lobster Lobster, achievements []string, panelWidth int) string {
 	if panelWidth < 20 {
 		panelWidth = 30
 	}
@@ -73,11 +80,33 @@ func viewTaskPanel(tasks []Task, lobster Lobster, panelWidth int) string {
 		}
 
 		line := fmt.Sprintf(" %s %s", iconStyle.Render(icon), titleStyle.Render(task.Title))
-		// Truncate if too long
-		if len(line) > panelWidth-2 {
-			line = line[:panelWidth-5] + "..."
+		// Truncate if too wide (use display width for CJK/emoji support)
+		if lipgloss.Width(line) > panelWidth-2 {
+			// Trim rune by rune until it fits
+			runes := []rune(task.Title)
+			for lipgloss.Width(line) > panelWidth-5 && len(runes) > 0 {
+				runes = runes[:len(runes)-1]
+				line = fmt.Sprintf(" %s %s...", iconStyle.Render(icon), titleStyle.Render(string(runes)))
+			}
 		}
 		sb.WriteString(line + "\n")
+	}
+
+	sb.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render(divider) + "\n")
+
+	// Achievements section
+	sb.WriteString(lipgloss.NewStyle().
+		Foreground(colorSecondary).
+		Bold(true).
+		Padding(0, 1).
+		Render("成就") + "\n")
+
+	allAch := achievement.AllAchievements()
+	for _, a := range allAch {
+		if achievement.IsUnlocked(a.ID, achievements) {
+			line := fmt.Sprintf(" %s %s", a.Icon, a.Name)
+			sb.WriteString(lipgloss.NewStyle().Foreground(colorSuccess).Render(line) + "\n")
+		}
 	}
 
 	sb.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render(divider) + "\n")

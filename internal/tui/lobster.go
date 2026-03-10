@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"opskit/internal/health"
 	"opskit/internal/state"
 )
 
@@ -134,12 +135,15 @@ func (l *Lobster) XPBar() string {
 
 // StatusIcon returns an icon for the current status.
 func (l *Lobster) StatusIcon() string {
-	switch l.Status {
-	case "active":
-		return "✨"
-	case "sick":
-		return "🤒"
-	default:
-		return "💤"
-	}
+	return health.StatusEmoji(l.Status)
+}
+
+// StatusLabel returns the Chinese label for the current status.
+func (l *Lobster) StatusLabel() string {
+	return health.StatusLabel(l.Status)
+}
+
+// UpdateStatusFromHP updates the lobster's status based on current HP.
+func (l *Lobster) UpdateStatusFromHP() {
+	l.Status = health.HPStatus(l.HP, l.MaxHP)
 }

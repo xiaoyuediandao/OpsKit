@@ -10,6 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"opskit/internal/ai"
+	"opskit/internal/health"
+	"opskit/internal/state"
 	"opskit/internal/tools"
 )
 
@@ -26,6 +28,7 @@ type ChatMessage struct {
 	Role      string // "user", "assistant", "system", "tool_preview", "tool_result"
 	Content   string
 	ToolName  string
+	IsError   bool
 	Timestamp time.Time
 }
 
@@ -60,12 +63,17 @@ type agentToolDoneMsg struct {
 	toolCallID string
 	toolName   string
 	result     tools.ToolResult
+	args       map[string]interface{}
 }
 
 type tickMsg time.Time
 
 type setupDoneMsg struct {
 	err error
+}
+
+type healthTickMsg struct {
+	report health.HealthReport
 }
 
 // Model is the main Bubble Tea model.
@@ -78,7 +86,6 @@ type Model struct {
 
 	// Chat
 	messages []ChatMessage
-	history  []ai.Message // kept for simple streaming mode reference (not used in agent mode)
 	viewport viewport.Model
 
 	// Input
@@ -92,9 +99,16 @@ type Model struct {
 
 	// Task panel
 	showTaskPanel bool
+	tasks         []Task
 
 	// Lobster
 	lobster Lobster
+
+	// Quest & Achievement state (persisted via state.json)
+	questStates  map[string]string
+	achievements []string
+	toolUseCount int
+	logViewCount int
 
 	// AI client
 	aiClient *ai.Client
@@ -104,10 +118,11 @@ type Model struct {
 	chunkCh   chan string
 
 	// Agent loop
-	agentHistory    []ai.AgentMessage
-	pendingToolCall *ai.ToolCall
-	agentLoopDepth  int
-	agentThinking   bool
+	agentHistory     []ai.AgentMessage
+	pendingToolCall  *ai.ToolCall
+	pendingToolCalls []ai.ToolCall // remaining tool calls to process
+	agentLoopDepth   int
+	agentThinking    bool
 
 	// Setup mode fields
 	setupStep    int
@@ -119,29 +134,35 @@ type Model struct {
 }
 
 // InitialModel creates the initial model in either Setup or Chat mode.
-func InitialModel(aiClient *ai.Client, lobster Lobster, startInSetup bool) Model {
+func InitialModel(aiClient *ai.Client, lobster Lobster, st *state.State, startInSetup bool) Model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = styleMuted
 
 	inp := textinput.New()
 	inp.Placeholder = "Ask Claw anything..."
-	inp.Focus()
 	inp.CharLimit = 2000
 	inp.Width = 60
+	inp.Prompt = "> "
 
 	setupInp := textinput.New()
+	setupInp.Prompt = "  > "
 	setupInp.CharLimit = 500
 
 	lobster.Status = "idle"
 
 	m := Model{
-		spinner:      sp,
-		input:        inp,
-		setupInput:   setupInp,
-		lobster:      lobster,
-		aiClient:     aiClient,
+		spinner:       sp,
+		input:         inp,
+		setupInput:    setupInp,
+		lobster:       lobster,
+		aiClient:      aiClient,
 		showTaskPanel: false,
+		tasks:         questsToTasks(st.Quests),
+		questStates:   st.Quests,
+		achievements:  st.Achievements,
+		toolUseCount:  st.ToolUseCount,
+		logViewCount:  st.LogViewCount,
 	}
 
 	if startInSetup {
@@ -164,12 +185,16 @@ func InitialModel(aiClient *ai.Client, lobster Lobster, startInSetup bool) Model
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		m.spinner.Tick,
 		textinput.Blink,
-		tea.WindowSize(), // 立即触发 WindowSizeMsg，避免卡在"正在初始化"
+		tea.WindowSize(),
 		tea.Every(100*time.Millisecond, func(t time.Time) tea.Msg {
 			return tickMsg(t)
 		}),
-	)
+	}
+	if m.mode == ModeChat {
+		cmds = append(cmds, m.scheduleHealthTick())
+	}
+	return tea.Batch(cmds...)
 }

@@ -14,3 +14,9 @@ opskit
 
 # Local config (contains API keys)
 *.env
+
+# AI IDE local files
+CLAUDE.md
+.agents/
+skills/
+skills-lock.json

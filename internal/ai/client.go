@@ -283,6 +283,8 @@ func (c *Client) Chat(history []Message) (string, error) {
 // ChatStream sends a streaming chat request and writes chunks to the channel.
 // The channel is closed when done or on error.
 func (c *Client) ChatStream(history []Message, ch chan<- string) error {
+	defer close(ch)
+
 	req := chatRequest{
 		Model:    c.Model,
 		Messages: c.buildMessages(history),

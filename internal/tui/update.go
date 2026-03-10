@@ -10,7 +10,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"opskit/internal/achievement"
 	"opskit/internal/ai"
+	"opskit/internal/health"
+	"opskit/internal/quest"
 	"opskit/internal/state"
 	"opskit/internal/tools"
 )
@@ -62,9 +65,16 @@ func (m Model) handleWindowSize(msg tea.WindowSizeMsg) (Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderMessages())
 		m.ready = true
 		initMarkdown(viewportW - 4)
+		// Focus input now that terminal is initialized — avoids capturing
+		// terminal color query responses (e.g. rgb:ffff/ffff/ffff) as input.
+		if m.mode == ModeChat {
+			m.input.Reset()
+			m.input.Focus()
+		}
 	} else {
 		m.viewport.Width = viewportW
 		m.viewport.Height = viewportH
+		initMarkdown(viewportW - 4)
 		m.viewport.SetContent(m.renderMessages())
 	}
 
@@ -94,6 +104,7 @@ func (m Model) updateChat(msg tea.Msg) (Model, tea.Cmd) {
 			case tea.KeyEsc:
 				// Cancel pending tool call
 				m.pendingToolCall = nil
+				m.pendingToolCalls = nil
 				m.agentThinking = false
 				m.loading = false
 				m.messages = append(m.messages, ChatMessage{
@@ -102,6 +113,7 @@ func (m Model) updateChat(msg tea.Msg) (Model, tea.Cmd) {
 					Timestamp: time.Now(),
 				})
 				m.refreshViewport()
+				m.input.Focus()
 				return m, nil
 			}
 			return m, nil
@@ -149,7 +161,7 @@ func (m Model) updateChat(msg tea.Msg) (Model, tea.Cmd) {
 			content := m.streamBuf.String()
 			m.finalizeStreamingMessage(content)
 			m.lobster.AddXP(10)
-			_ = state.Save(m.lobster.ToState())
+			m.saveFullState()
 		}
 		m.streamBuf.Reset()
 		m.refreshViewport()
@@ -161,6 +173,14 @@ func (m Model) updateChat(msg tea.Msg) (Model, tea.Cmd) {
 
 	case agentToolDoneMsg:
 		return m.handleAgentToolDone(msg)
+
+	case healthTickMsg:
+		hp := health.CalculateHP(msg.report, m.lobster.MaxHP)
+		m.lobster.HP = hp
+		m.lobster.UpdateStatusFromHP()
+		m.saveFullState()
+		m.refreshViewport()
+		return m, m.scheduleHealthTick()
 	}
 
 	// Update input and viewport
@@ -252,7 +272,7 @@ func (m Model) handleAgentThinkDone(msg agentThinkDoneMsg) (Model, tea.Cmd) {
 		})
 		m.lobster.AddXP(15)
 		m.lobster.Status = "idle"
-		_ = state.Save(m.lobster.ToState())
+		m.saveFullState()
 		m.refreshViewport()
 		m.input.Focus()
 		return m, nil
@@ -267,7 +287,10 @@ func (m Model) handleAgentThinkDone(msg agentThinkDoneMsg) (Model, tea.Cmd) {
 			Content:   "我已经执行了很多步骤了，先停下来休息一下 🦞💤\n\n如果还需要继续，请告诉我！",
 			Timestamp: time.Now(),
 		})
-		m.agentHistory = []ai.AgentMessage{}
+		// Keep last few messages for context instead of clearing everything
+		if len(m.agentHistory) > 4 {
+			m.agentHistory = m.agentHistory[len(m.agentHistory)-4:]
+		}
 		m.refreshViewport()
 		m.input.Focus()
 		return m, nil
@@ -275,6 +298,7 @@ func (m Model) handleAgentThinkDone(msg agentThinkDoneMsg) (Model, tea.Cmd) {
 
 	// Has tool calls - show preview and wait for user confirmation
 	toolCall := resp.ToolCalls[0]
+	remaining := resp.ToolCalls[1:]
 
 	// Add assistant message with tool calls to history
 	m.agentHistory = append(m.agentHistory, ai.AgentMessage{
@@ -302,6 +326,7 @@ func (m Model) handleAgentThinkDone(msg agentThinkDoneMsg) (Model, tea.Cmd) {
 	})
 
 	m.pendingToolCall = &toolCall
+	m.pendingToolCalls = remaining
 	m.loading = false
 	m.agentLoopDepth++
 
@@ -330,18 +355,26 @@ func (m Model) executePendingTool() (Model, tea.Cmd) {
 
 	return m, func() tea.Msg {
 		var args map[string]interface{}
-		_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+			return agentToolDoneMsg{
+				toolCallID: tc.ID,
+				toolName:   tc.Function.Name,
+				result:     tools.ToolResult{Error: fmt.Sprintf("参数解析失败: %v", err), IsErr: true},
+			}
+		}
 		result := tools.Execute(tc.Function.Name, args)
 		return agentToolDoneMsg{
 			toolCallID: tc.ID,
 			toolName:   tc.Function.Name,
 			result:     result,
+			args:       args,
 		}
 	}
 }
 
 func (m Model) handleAgentToolDone(msg agentToolDoneMsg) (Model, tea.Cmd) {
 	m.executing = false
+	prevHP := m.lobster.HP
 
 	// Build result content
 	var resultContent string
@@ -369,6 +402,7 @@ func (m Model) handleAgentToolDone(msg agentToolDoneMsg) (Model, tea.Cmd) {
 		Role:      "tool_result",
 		Content:   resultContent,
 		ToolName:  msg.toolName,
+		IsError:   msg.result.IsErr,
 		Timestamp: time.Now(),
 	})
 
@@ -380,8 +414,81 @@ func (m Model) handleAgentToolDone(msg agentToolDoneMsg) (Model, tea.Cmd) {
 		Name:       msg.toolName,
 	})
 
-	_ = state.Save(m.lobster.ToState())
+	// Quest completion and achievement checks on success
+	if !msg.result.IsErr {
+		m.toolUseCount++
+
+		// Check if this tool execution completes a quest
+		completedQuestID := quest.CheckCompletion(msg.toolName, msg.args, msg.result.Output, m.questStates)
+		if completedQuestID != "" {
+			q := quest.CompleteQuest(completedQuestID, m.questStates)
+			if q != nil {
+				m.lobster.AddXP(q.XPReward)
+				m.messages = append(m.messages, ChatMessage{
+					Role:      "system",
+					Content:   fmt.Sprintf("🎉 任务完成：%s [%s] %s +%d XP", q.ID, q.Title, q.Description, q.XPReward),
+					Timestamp: time.Now(),
+				})
+				if q.StageReward >= 0 && q.StageReward > m.lobster.Stage {
+					oldEmoji := m.lobster.StageEmoji()
+					oldName := m.lobster.StageName()
+					m.lobster.Stage = q.StageReward
+					m.messages = append(m.messages, ChatMessage{
+						Role:      "system",
+						Content:   fmt.Sprintf("龙虾状态变化：%s %s → %s %s", oldEmoji, oldName, m.lobster.StageEmoji(), m.lobster.StageName()),
+						Timestamp: time.Now(),
+					})
+				}
+				m.tasks = questsToTasks(m.questStates)
+			}
+		}
+
+		// Achievement check
+		newAchievements := achievement.Check("tool_use", m.questStates, m.achievements, m.toolUseCount, m.logViewCount)
+		for _, a := range newAchievements {
+			m.achievements = append(m.achievements, a.ID)
+			m.messages = append(m.messages, ChatMessage{
+				Role:      "system",
+				Content:   fmt.Sprintf("🏆 成就解锁：%s「%s」--- %s", a.Icon, a.Name, a.Desc),
+				Timestamp: time.Now(),
+			})
+		}
+	}
+
+	// Check revive achievement
+	if prevHP <= 0 && m.lobster.HP > 0 {
+		reviveAchievements := achievement.Check("revive", m.questStates, m.achievements, m.toolUseCount, m.logViewCount)
+		for _, a := range reviveAchievements {
+			m.achievements = append(m.achievements, a.ID)
+			m.messages = append(m.messages, ChatMessage{
+				Role:      "system",
+				Content:   fmt.Sprintf("🏆 成就解锁：%s「%s」--- %s", a.Icon, a.Name, a.Desc),
+				Timestamp: time.Now(),
+			})
+		}
+	}
+
+	m.saveFullState()
 	m.refreshViewport()
+
+	// If there are more pending tool calls, show the next one
+	if len(m.pendingToolCalls) > 0 {
+		next := m.pendingToolCalls[0]
+		m.pendingToolCalls = m.pendingToolCalls[1:]
+
+		preview := formatToolPreview(next)
+		m.messages = append(m.messages, ChatMessage{
+			Role:      "tool_preview",
+			Content:   preview,
+			ToolName:  next.Function.Name,
+			Timestamp: time.Now(),
+		})
+		m.pendingToolCall = &next
+		m.loading = false
+		m.agentThinking = false
+		m.refreshViewport()
+		return m, nil
+	}
 
 	// Continue agent loop
 	m.agentThinking = true
@@ -417,6 +524,23 @@ func (m *Model) refreshViewport() {
 	content := m.renderMessages()
 	m.viewport.SetContent(content)
 	m.viewport.GotoBottom()
+}
+
+func (m *Model) saveFullState() {
+	st := m.lobster.ToState()
+	st.Quests = m.questStates
+	st.Achievements = m.achievements
+	st.ToolUseCount = m.toolUseCount
+	st.LogViewCount = m.logViewCount
+	_ = state.Save(st)
+}
+
+func (m Model) scheduleHealthTick() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(60 * time.Second)
+		report := health.RunProbes()
+		return healthTickMsg{report: report}
+	}
 }
 
 func (m *Model) updateStreamingMessage(content string) {
@@ -465,7 +589,9 @@ func streamNextChunk(ch <-chan string) tea.Cmd {
 // formatToolPreview formats a tool call for display.
 func formatToolPreview(tc ai.ToolCall) string {
 	var args map[string]interface{}
-	_ = json.Unmarshal([]byte(tc.Function.Arguments), &args)
+	if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+		return fmt.Sprintf("工具调用: **%s**\n\n⚠ 参数解析失败: %v\n\n原始参数: `%s`\n\n按 **Esc** 取消", tc.Function.Name, err, tc.Function.Arguments)
+	}
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("工具调用: **%s**\n\n", tc.Function.Name))

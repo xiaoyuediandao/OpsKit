@@ -47,7 +47,7 @@ func main() {
 	}
 
 	// Create model
-	m := tui.InitialModel(aiClient, lobster, startInSetup)
+	m := tui.InitialModel(aiClient, lobster, st, startInSetup)
 
 	// Create program
 	p := tea.NewProgram(
