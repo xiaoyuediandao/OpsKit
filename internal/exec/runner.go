@@ -3,9 +3,7 @@ package exec
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -22,9 +20,8 @@ func NewRunner(timeout time.Duration) *Runner {
 // Run executes the shell command and returns combined stdout+stderr output.
 // It kills the entire process group on timeout to clean up interactive child processes.
 func (r *Runner) Run(cmd string) (string, error) {
-	c := exec.Command("bash", "-c", cmd)
-	// Set a new process group so we can kill all children on timeout
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	c := newShellCommand(cmd)
+	setSysProcAttr(c)
 	// No stdin — non-interactive
 	c.Stdin = nil
 
@@ -45,8 +42,7 @@ func (r *Runner) Run(cmd string) (string, error) {
 		// Completed normally
 	case <-time.After(r.Timeout):
 		// Kill entire process group
-		pgid := -c.Process.Pid
-		_ = syscall.Kill(pgid, syscall.SIGKILL)
+		killProcessGroup(c)
 		<-done
 		runErr = fmt.Errorf("command timed out after %v", r.Timeout)
 	}

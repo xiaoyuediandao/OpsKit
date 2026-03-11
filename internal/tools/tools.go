@@ -18,7 +18,7 @@ func AllToolDefinitions() []ai.ToolDefinition {
 			Type: "function",
 			Function: ai.ToolFunction{
 				Name:        "bash",
-				Description: "Execute a shell command. Returns stdout and stderr combined. Use for running system commands, checking status, installing software, etc.",
+				Description: "Execute a shell command (bash on macOS/Linux, PowerShell on Windows). Returns stdout and stderr combined. Use for running system commands, checking status, installing software, etc.",
 				Parameters: ai.ToolParam{
 					Type: "object",
 					Properties: map[string]interface{}{
