@@ -2,6 +2,7 @@ package tools
 
 import (
 	"opskit/internal/ai"
+	"opskit/internal/security"
 )
 
 // ToolResult holds the output of a tool execution.
@@ -86,26 +87,61 @@ func AllToolDefinitions() []ai.ToolDefinition {
 				},
 			},
 		},
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "security_scan",
+				Description: "扫描 OpenClaw 安全配置，检查 SECURITY.md 部署、AGENTS.md 引用、SOUL.md 安全边界、文件权限和密钥泄露。输出安全评分报告（A/B/C/D/F）。",
+				Parameters: ai.ToolParam{
+					Type:       "object",
+					Properties: map[string]interface{}{},
+				},
+			},
+		},
+		{
+			Type: "function",
+			Function: ai.ToolFunction{
+				Name:        "security_fix",
+				Description: "自动加固 OpenClaw 安全配置：部署 SECURITY.md、注入 AGENTS.md 安全引用、补丁 SOUL.md 安全边界、修复文件权限。幂等操作，可重复执行。",
+				Parameters: ai.ToolParam{
+					Type:       "object",
+					Properties: map[string]interface{}{},
+				},
+			},
+		},
 	}
 }
 
 // Execute dispatches a tool call by name with the given arguments.
+// All tool outputs are redacted to remove sensitive information.
 func Execute(name string, args map[string]interface{}) ToolResult {
+	var result ToolResult
 	switch name {
 	case "bash":
 		cmd, _ := args["command"].(string)
-		return RunBash(cmd)
+		result = RunBash(cmd)
 	case "read_file":
 		path, _ := args["path"].(string)
-		return ReadFile(path)
+		result = ReadFile(path)
 	case "write_file":
 		path, _ := args["path"].(string)
 		content, _ := args["content"].(string)
-		return WriteFile(path, content)
+		result = WriteFile(path, content)
 	case "list_dir":
 		path, _ := args["path"].(string)
-		return ListDir(path)
+		result = ListDir(path)
+	case "security_scan":
+		result = RunSecurityScan()
+	case "security_fix":
+		result = RunSecurityFix()
 	default:
 		return ToolResult{Error: "unknown tool: " + name, IsErr: true}
 	}
+
+	// Apply redaction to all tool outputs (defense in depth)
+	result.Output = security.Redact(result.Output)
+	if result.Error != "" {
+		result.Error = security.Redact(result.Error)
+	}
+	return result
 }

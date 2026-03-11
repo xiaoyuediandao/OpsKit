@@ -81,7 +81,7 @@ func checkCondition(id string, event string, questStates map[string]string, tool
 	case "rollback":
 		return event == "rollback"
 	case "full_armor":
-		return event == "full_armor"
+		return questStates["Q10"] == "done"
 	case "log_addict":
 		return logViewCount >= 10
 	case "social":
@@ -93,7 +93,7 @@ func checkCondition(id string, event string, questStates map[string]string, tool
 }
 
 func allQuestsDone(quests map[string]string) bool {
-	for i := 1; i <= 9; i++ {
+	for i := 1; i <= 10; i++ {
 		id := fmt.Sprintf("Q%d", i)
 		if quests[id] != "done" {
 			return false

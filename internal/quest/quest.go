@@ -34,6 +34,8 @@ var allQuests = []Quest{
 	{ID: "Q7", Code: "nest", Title: "筑巢", Description: "配置开机自启", XPReward: 80, StageReward: -1},
 	{ID: "Q8", Code: "telepathy", Title: "通灵", Description: "接入飞书机器人", XPReward: 120, StageReward: 3},
 	{ID: "Q9", Code: "open_eyes", Title: "开眼", Description: "启用 Web Dashboard", XPReward: 50, StageReward: -1},
+	{ID: "Q10", Code: "armor", Title: "护甲", Description: "部署安全防护", XPReward: 100, StageReward: 4},
+	{ID: "Q10", Code: "armor", Title: "护甲", Description: "部署安全防护", XPReward: 100, StageReward: 4},
 }
 
 // questByID maps quest ID to its index in allQuests.
@@ -129,6 +131,9 @@ func matchQuest(questID, toolName string, args map[string]interface{}, lowerOutp
 		return toolName == "bash" &&
 			(strings.Contains(cmd, "dashboard") ||
 				strings.Contains(lowerOutput, "dashboard"))
+	case "Q10":
+		return toolName == "security_scan" &&
+			(strings.Contains(lowerOutput, "grade: a") || strings.Contains(lowerOutput, "100/100"))
 	}
 	return false
 }

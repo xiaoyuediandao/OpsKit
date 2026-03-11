@@ -11,6 +11,7 @@ import (
 
 	"opskit/internal/ai"
 	"opskit/internal/config"
+	"opskit/internal/security"
 	"opskit/internal/state"
 )
 
@@ -91,6 +92,10 @@ func (m Model) saveSetupConfig() tea.Cmd {
 			APIKey: apiKey,
 		}
 		err := config.Save(cfg)
+		if err == nil {
+			// Auto-harden on first setup — zero-config security
+			security.Harden()
+		}
 		return setupDoneMsg{err: err}
 	}
 }
