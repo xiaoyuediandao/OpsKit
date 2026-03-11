@@ -30,20 +30,12 @@ func main() {
 
 	lobster := tui.NewLobster(st)
 
-	// Create AI client — always apply defaults for missing fields
+	// Create AI client using hardcoded base URL and model
 	var aiClient *ai.Client
 	if cfg != nil && cfg.APIKey != "" {
-		baseURL := cfg.BaseURL
-		if baseURL == "" {
-			baseURL = config.DefaultBaseURL
-		}
-		model := cfg.Model
-		if model == "" {
-			model = config.DefaultModel
-		}
-		aiClient = ai.NewClient(cfg.APIKey, baseURL, model)
+		aiClient = ai.NewClient(cfg.APIKey, config.BaseURL, config.Model)
 	} else {
-		aiClient = ai.NewClient("", config.DefaultBaseURL, config.DefaultModel)
+		aiClient = ai.NewClient("", config.BaseURL, config.Model)
 	}
 
 	// Create model

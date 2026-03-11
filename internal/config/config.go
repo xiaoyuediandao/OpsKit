@@ -7,15 +7,13 @@ import (
 )
 
 const (
-	DefaultBaseURL = "https://ark.cn-beijing.volces.com/api/coding/v3"
-	DefaultModel   = "doubao-seed-2.0-code"
+	BaseURL = "https://ark.cn-beijing.volces.com/api/coding/v3"
+	Model   = "doubao-seed-2.0-code"
 )
 
 // Config stored at ~/.opskit/config.json
 type Config struct {
-	APIKey  string `json:"api_key"`
-	BaseURL string `json:"base_url"`
-	Model   string `json:"model"`
+	APIKey string `json:"api_key"`
 }
 
 func configPath() (string, error) {

@@ -125,12 +125,10 @@ type Model struct {
 	agentThinking    bool
 
 	// Setup mode fields
-	setupStep    int
-	setupInput   textinput.Model
-	setupAPIKey  string
-	setupBaseURL string
-	setupModel   string
-	setupErr     string
+	setupStep   int
+	setupInput  textinput.Model
+	setupAPIKey string
+	setupErr    string
 }
 
 // InitialModel creates the initial model in either Setup or Chat mode.
@@ -168,8 +166,6 @@ func InitialModel(aiClient *ai.Client, lobster Lobster, st *state.State, startIn
 	if startInSetup {
 		m.mode = ModeSetup
 		m.setupStep = 0
-		m.setupBaseURL = "https://ark.cn-beijing.volces.com/api/coding/v3"
-		m.setupModel = "doubao-seed-2.0-code"
 	} else {
 		m.mode = ModeChat
 		// Add a welcome message
