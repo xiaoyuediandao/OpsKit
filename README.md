@@ -18,10 +18,13 @@ OpsKit 是一个基于终端 UI 的 AI 运维助手，专为 [OpenClaw](https://
 - **初始化向导** — 首次运行自动引导配置 API Key 和模型
 
 ### Claw 能帮你做什么
+<img width="1361" height="894" alt="iShot_2026-03-10_09 50 52" src="https://github.com/user-attachments/assets/6bc24445-5cc6-46b3-b441-1be72a5a3257" />
 
 - 安装 OpenClaw（引导用户在终端执行）
 - 配置 API Key 和模型（写入 `~/.openclaw/openclaw.json`）
 - 管理服务（`openclaw gateway start/stop/restart/status`）
+<img width="1496" height="1074" alt="iShot_2026-03-10_00 15 53" src="https://github.com/user-attachments/assets/a36e52fb-e17d-45e7-914f-e2aa450d8554" />
+
 - 接入飞书、微信等渠道
 - 故障排查（查日志、检查端口、重启服务）
 - 版本升级
